@@ -1,0 +1,3 @@
+[submodule "Metaballs/Utility"]
+	path = Metaballs/Utility
+	url = https://github.com/orglofch/Utility.git
