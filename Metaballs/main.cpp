@@ -31,7 +31,7 @@
 #include "Utility\quaternion.hpp"
 
 /** If you change this value, change it in the shaders as well. **/
-const static int MAX_METABALLS = 80;
+const static int MAX_CHARGES = 30;
 
 enum RenderMode
 {
@@ -39,9 +39,9 @@ enum RenderMode
 	RENDER_MODE_3D
 };
 
-struct Metaball
+struct Charge
 {
-	Point3 position;
+	Point3 center;
 	Vector3 velocity;
 	
 	int radius = 1;
@@ -49,113 +49,110 @@ struct Metaball
 
 struct MetaballShader2D : public Shader
 {
-	Uniform metaball_uniform = -1;
-	Uniform metaball_count_uniform = -1;
+	Uniform charges_uniform = -1;
+	Uniform charge_count_uniform = -1;
+
 	Uniform threshold_uniform = -1;
 };
 
 struct MetaballShader3D : public Shader
 {
-	Uniform metaball_uniform = -1;
-	Uniform metaball_count_uniform = -1;
+	Uniform charges_uniform = -1;
+	Uniform charge_count_uniform = -1;
+
 	Uniform threshold_uniform = -1;
-	Uniform origin_uniform = -1;
 
+	Uniform camera_origin_uniform = -1;
 	Uniform camera_matrix_uniform = -1;
-
-	Uniform time_uniform = -1;
 };
 
 struct State
 {
 	int window = 0;
 
-	RenderMode render_mode = RENDER_MODE_3D;
+	bool paused = false;
 
+	RenderMode render_mode = RENDER_MODE_3D;
 	MetaballShader2D shader_2d;
 	MetaballShader3D shader_3d;
 
-	Metaball metaballs[MAX_METABALLS];
-	int active_metaballs = 0;
+	Charge charges[MAX_CHARGES];
+	int active_charges = 0;
 
 	float threshold = 1000;
 
 	Quaternion rotation;
 
-	bool paused = false;
-
-	Size3 bounding_box = Size3(450, 350, 450);
-
-	int time = 0;
+	Size3 bounding_box = Size3(250, 150, 250);
 };
 
 State state;
 
 void update() {
-	// TODO(orglofch): Sort the metaballs in some fashion so the shader
+	// TODO(orglofch): Sort the charges in some fashion so the shader
 	// can shortcut some work.
 
-	// Move the metaballs.
-	for (int i = 0; i < state.active_metaballs; ++i) {
-		Metaball &metaball = state.metaballs[i];
-		metaball.position += metaball.velocity;
-		if (metaball.position.x < -state.bounding_box.width / 2) {
-			metaball.position.x = -state.bounding_box.width / 2;
-			metaball.velocity.x *= -0.99;
-		} else if (metaball.position.x > state.bounding_box.width / 2) {
-			metaball.position.x = state.bounding_box.width / 2;
-			metaball.velocity.x *= -0.99;
+	// Move the charges.
+	for (int i = 0; i < state.active_charges; ++i) {
+		Charge &charge = state.charges[i];
+		charge.center += charge.velocity;
+		if (charge.center.x < -state.bounding_box.width / 2) {
+			charge.center.x = -state.bounding_box.width / 2;
+			charge.velocity.x *= -0.99;
+		} else if (charge.center.x > state.bounding_box.width / 2) {
+			charge.center.x = state.bounding_box.width / 2;
+			charge.velocity.x *= -0.99;
 		}
-		if (metaball.position.y < -state.bounding_box.height / 2) {
-			metaball.position.y = -state.bounding_box.height / 2;
-			metaball.velocity.y *= -0.99;
-		} else if (metaball.position.y > state.bounding_box.height / 2) {
-			metaball.position.y = state.bounding_box.height / 2;
-			metaball.velocity.y *= -0.99;
+		if (charge.center.y < -state.bounding_box.height / 2) {
+			charge.center.y = -state.bounding_box.height / 2;
+			charge.velocity.y *= -0.99;
+		} else if (charge.center.y > state.bounding_box.height / 2) {
+			charge.center.y = state.bounding_box.height / 2;
+			charge.velocity.y *= -0.99;
 		}
-		if (metaball.position.z < -state.bounding_box.depth / 2) {
-			metaball.position.z = -state.bounding_box.depth / 2;
-			metaball.velocity.z *= -0.99;
-		} else if (metaball.position.z > state.bounding_box.depth / 2) {
-			metaball.position.z = state.bounding_box.depth / 2;
-			metaball.velocity.z *= -0.99;
+		if (charge.center.z < -state.bounding_box.depth / 2) {
+			charge.center.z = -state.bounding_box.depth / 2;
+			charge.velocity.z *= -0.99;
+		} else if (charge.center.z > state.bounding_box.depth / 2) {
+			charge.center.z = state.bounding_box.depth / 2;
+			charge.velocity.z *= -0.99;
 		}
 	}
+	state.rotation *= Quaternion(0.0, 0.002, 0.0, 1.0);
 }
 
 void render() {
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// Serialize the metaballs.
-	GLfloat *metaball_data = new GLfloat[MAX_METABALLS * 4];
-	for (int i = 0; i < state.active_metaballs; ++i) {
-		const Metaball &metaball = state.metaballs[i];
+	// Serialize the charges.
+	GLfloat *charge_data = new GLfloat[state.active_charges * 4];
+	for (int i = 0; i < state.active_charges; ++i) {
+		const Charge &charge = state.charges[i];
 		int index = i * 4;
-		metaball_data[index + 0] = metaball.position.x;
-		metaball_data[index + 1] = metaball.position.y;
-		metaball_data[index + 2] = metaball.position.z;
-		metaball_data[index + 3] = metaball.radius;
+		charge_data[index + 0] = charge.center.x;
+		charge_data[index + 1] = charge.center.y;
+		charge_data[index + 2] = charge.center.z;
+		charge_data[index + 3] = charge.radius;
 	}
 
 	if (state.render_mode == RENDER_MODE_2D) {
 		glUseProgram(state.shader_2d.program);
-		glUniform4fv(state.shader_2d.metaball_uniform, MAX_METABALLS, metaball_data);
-		glUniform1i(state.shader_2d.metaball_count_uniform, state.active_metaballs);
+		glUniform4fv(state.shader_2d.charges_uniform, state.active_charges, charge_data);
+		glUniform1i(state.shader_2d.charge_count_uniform, state.active_charges);
 		glUniform1f(state.shader_2d.threshold_uniform, state.threshold);
 	} else if (state.render_mode == RENDER_MODE_3D) {
 		glUseProgram(state.shader_3d.program);
-		glUniform4fv(state.shader_3d.metaball_uniform, MAX_METABALLS, metaball_data);
-		glUniform1i(state.shader_3d.metaball_count_uniform, state.active_metaballs);
+		glUniform4fv(state.shader_3d.charges_uniform, state.active_charges, charge_data);
+		glUniform1i(state.shader_3d.charge_count_uniform, state.active_charges);
 		glUniform1f(state.shader_3d.threshold_uniform, state.threshold);
-		glUniform1i(state.shader_3d.time_uniform, state.time);
 
-		Point3 eye = state.rotation.matrix() * Point3(0, 0, -600);
+		Point3 eye = state.rotation.matrix() * Point3(0, 0, -400);
 
 		GLfloat origin[3];
 		for (int i = 0; i < 3; ++i) {
 			origin[i] = eye.d[i];
 		}
-		glUniform3fv(state.shader_3d.origin_uniform, 1, origin);
+		glUniform3fv(state.shader_3d.camera_origin_uniform, 1, origin);
 
 		Vector3 view = Point3(0, 0, 0) - eye;
 		view.normalize();
@@ -163,7 +160,7 @@ void render() {
 
 		double d = view.length();
 		double h = 2.0 * d * tan(toRad(60 /* fov */) / 2.0);
-		Matrix4x4 t1 = Matrix4x4::translation(-540, -360, d);
+		Matrix4x4 t1 = Matrix4x4::translation(-640, -360, d);
 		Matrix4x4 s2 = Matrix4x4::scaling(-h / 720, -h / 720, 1.0);
 		Matrix4x4 r3 = Matrix4x4::rotation(eye, view, up);
 		Matrix4x4 t4 = Matrix4x4::translation(eye - Point3(0, 0, 0));
@@ -175,7 +172,7 @@ void render() {
 		glUniformMatrix4fv(state.shader_3d.camera_matrix_uniform, 1, false, camera_data);
 	}
 
-	delete[] metaball_data;
+	delete[] charge_data;
 	glDrawRect(-1, 1, -1, 1, 0);
 
 	glutSwapBuffers();
@@ -187,8 +184,6 @@ void tick() {
 		update();
 	}
 	render();
-	state.rotation *= Quaternion(0.0, 0.002, 0.0, 1.0);
-	state.time++;
 }
 
 void handleMouseButton(int button, int button_state, int x, int y) {
@@ -203,6 +198,10 @@ void handleMouseButton(int button, int button_state, int x, int y) {
 
 void handlePressNormalKeys(unsigned char key, int x, int y) {
 	switch (key) {
+		case 'e':
+		case 'E':
+			state.render_mode = static_cast<RenderMode>(!state.render_mode);
+			break;
 		case 'q':
 		case 'Q':
 		case 27:
@@ -237,17 +236,16 @@ void init() {
 	glutSpecialUpFunc(handleReleaseSpecialKey);
 
 	state.shader_2d.program = glLoadShader("pass_through.vert", "metaball_shader_2d.frag");
-	state.shader_2d.metaball_uniform = glGetUniform(state.shader_2d, "metaballs");
-	state.shader_2d.metaball_count_uniform = glGetUniform(state.shader_2d, "metaball_count");
+	state.shader_2d.charges_uniform = glGetUniform(state.shader_2d, "charges");
+	state.shader_2d.charge_count_uniform = glGetUniform(state.shader_2d, "charge_count");
 	state.shader_2d.threshold_uniform = glGetUniform(state.shader_2d, "threshold");
 
 	state.shader_3d.program = glLoadShader("metaball_shader_3d.vert", "metaball_shader_3d.frag");
-	state.shader_3d.metaball_uniform = glGetUniform(state.shader_3d, "metaballs");
-	state.shader_3d.metaball_count_uniform = glGetUniform(state.shader_3d, "metaball_count");
+	state.shader_3d.charges_uniform = glGetUniform(state.shader_3d, "charges");
+	state.shader_3d.charge_count_uniform = glGetUniform(state.shader_3d, "charge_count");
 	state.shader_3d.threshold_uniform = glGetUniform(state.shader_3d, "threshold");
-	state.shader_3d.origin_uniform = glGetUniform(state.shader_3d, "origin");
+	state.shader_3d.camera_origin_uniform = glGetUniform(state.shader_3d, "camera_origin");
 	state.shader_3d.camera_matrix_uniform = glGetUniform(state.shader_3d, "camera_matrix");
-	state.shader_3d.time_uniform = glGetUniform(state.shader_3d, "time");
 }
 
 void cleanup() {
@@ -256,33 +254,22 @@ void cleanup() {
 int main(int argc, char **argv) {
 	srand((unsigned int)time(NULL));
 
-	for (int i = 0; i < MAX_METABALLS; ++i) {
-		state.metaballs[i].position.x = Randf(-state.bounding_box.width / 2, state.bounding_box.width / 2);
-		state.metaballs[i].position.y = Randf(-state.bounding_box.height / 2, state.bounding_box.height / 2);
-		state.metaballs[i].position.z = Randf(-state.bounding_box.depth / 2, state.bounding_box.depth / 2);
-		state.metaballs[i].velocity.x = Randf(-1, 1);
-		state.metaballs[i].velocity.y = Randf(-1, 1);
-		state.metaballs[i].velocity.z = Randf(-1, 1);
-		state.metaballs[i].radius = Randf(30, 100);
+	for (int i = 0; i < MAX_CHARGES; ++i) {
+		state.charges[i].center.x = Randf(-state.bounding_box.width / 2, state.bounding_box.width / 2);
+		state.charges[i].center.y = Randf(-state.bounding_box.height / 2, state.bounding_box.height / 2);
+		state.charges[i].center.z = Randf(-state.bounding_box.depth / 2, state.bounding_box.depth / 2);
+		state.charges[i].velocity.x = Randf(-3, 3);
+		state.charges[i].velocity.y = Randf(-3, 3);
+		state.charges[i].velocity.z = Randf(-3, 3);
+		state.charges[i].radius = Randf(10, 90);
 	}
-	state.active_metaballs = MAX_METABALLS;
-	/*state.metaballs[0].position = Point3(100, 100, 0);
-	//state.metaballs[0].velocity.x = -1;
-	state.metaballs[0].radius = 100;
-	state.metaballs[1].position = Point3(200, 200, -50);
-	state.metaballs[1].velocity.x = -1;
-	state.metaballs[1].radius = 100;
-	//state.metaballs[2].position = Point3(300, 300, -100);
-	//state.metaballs[2].velocity.x = -1;
-	//state.metaballs[2].radius = 100;
-	state.active_metaballs = 2;*/
+	state.active_charges = MAX_CHARGES;
 
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
 	glutInitWindowPosition(100, 100);
-	glutInitWindowSize(1080, 720);
+	glutInitWindowSize(1280, 720);
 	state.window = glutCreateWindow("Metaballs");
-	//glutFullScreen();
 	glewInit();
 
 	init();

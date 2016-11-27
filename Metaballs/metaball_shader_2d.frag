@@ -1,13 +1,13 @@
 # version 120
 
-/** The maximum number of metaballs that can be passed to this shader. */
-#define MAX_METABALLS 75
+/** The maximum number of charges that can be passed to this shader. */
+#define MAX_CHARGES 75
 
-/** Container for metaballs, may not be full. */
-uniform vec4 metaballs[MAX_METABALLS];
+/** Container for charges, may not be full. */
+uniform vec4 charges[MAX_CHARGES];
 
-/** The actual number of metaballs. */
-uniform int metaball_count;
+/** The actual number of charges. */
+uniform int charge_count;
 
 /** The treshold charge. */
 uniform float threshold;
@@ -15,13 +15,13 @@ uniform float threshold;
 void main()
 {
 	float charge = 0.0;
-	for (int i = 0; i < metaball_count; ++i) {
-		float dist = distance(metaballs[i].xy, gl_FragCoord.xy);
+	for (int i = 0; i < charge_count; ++i) {
+		float dist = distance(charges[i].xy, gl_FragCoord.xy);
 		if (dist == 0.0) {
 			charge = threshold;
 			break;
 		}
-		float r = dist / metaballs[i].w;
+		float r = dist / charges[i].w;
 		charge += 1 / (r*r);
 	}
 
